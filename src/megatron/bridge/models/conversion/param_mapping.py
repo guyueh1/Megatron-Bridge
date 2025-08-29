@@ -552,6 +552,20 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         # Return dictionary mapping HF parameter names to weights
         return {param_name: gathered_weights[i] for i, param_name in enumerate(gathered_expert_param_names)}
 
+    def canonicalize_precision_of_megatron_weights(self, megatron_weights: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        """ Handle low-precision (FP8) weights in Megatron.
+        """
+        if megatron_weights is None:
+            return megatron_weights
+        dtype = megatron_weights.dtype
+        if dtype == torch.bfloat16:
+            return megatron_weights.bfloat16()
+        elif dtype == torch.float16:
+            return megatron_weights.half()
+        elif dtype == torch.float32:
+            return megatron_weights.float()
+        else:
+            raise ValueError(f"Unsupported dtype: {dtype}")
 
 class DirectMapping(MegatronParamMapping[torch.Tensor]):
     """Direct 1:1 weight mapping with no transformation or tensor parallelism."""
@@ -571,6 +585,7 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
     ) -> Dict[str, torch.Tensor]:
         """Direct copy with PP broadcast."""
         # Handle cross-PP broadcast
+        megatron_weights = self.canonicalize_precision_of_megatron_weights(megatron_weights)
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
 
         if megatron_weights is None:
@@ -666,6 +681,8 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
+        # Handle low-precision (FP8) weights in Megatron.
+        megatron_weights = self.canonicalize_precision_of_megatron_weights(megatron_weights)
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
 
@@ -761,6 +778,8 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
+        # Handle low-precision (FP8) weights in Megatron.
+        megatron_weights = self.canonicalize_precision_of_megatron_weights(megatron_weights)
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
 
@@ -819,6 +838,8 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Return weight only from rank 0 to avoid duplication."""
+        # Handle low-precision (FP8) weights in Megatron.
+        megatron_weights = self.canonicalize_precision_of_megatron_weights(megatron_weights)
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
 
@@ -1123,6 +1144,8 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         # rank (also the ones that will early-return) participates in the
         # collective communication.
         # ------------------------------------------------------------------
+        # Handle low-precision (FP8) weights in Megatron.
+        megatron_weights = self.canonicalize_precision_of_megatron_weights(megatron_weights)
         if megatron_module is None:
             config = self.broadcast_obj_from_pp_rank(None)
         else:
@@ -1256,6 +1279,8 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         megatron_module: Optional[nn.Module],
     ) -> Dict[str, torch.Tensor]:
         """Gather concatenated shards and split into gate and up."""
+        # Handle low-precision (FP8) weights in Megatron.
+        megatron_weights = self.canonicalize_precision_of_megatron_weights(megatron_weights)
         # Handle cross-PP broadcast first
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights)
 

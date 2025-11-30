@@ -561,6 +561,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         cpu: bool = True,
         show_progress: bool = True,
         conversion_tasks: Optional[List[WeightConversionTask]] = None,
+        load_in_fp8: bool = False,
     ) -> Iterable[HFWeightTuple]:
         """Export Megatron weights to HuggingFace format.
 
@@ -620,7 +621,7 @@ class MegatronModelBridge(Generic[HFPreTrained, ModelProviderTarget, MegatronMod
         model_config = unwrap_model(megatron_model)[0].config
         embeddings_are_tied = model_config.share_embeddings_and_output_weights
         for task in self._with_progress_tracking(megatron_to_hf_tasks, "Converting to HuggingFace", show_progress):
-            converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module)
+            converted_weights_dict = task.mapping.megatron_to_hf(task.param_weight, task.megatron_module, load_in_fp8=load_in_fp8)
             converted_weights_dict = self.maybe_modify_converted_hf_weight(
                 task, converted_weights_dict
             )  # dict will be none except for one expert;
@@ -1019,6 +1020,7 @@ def register_bridge_implementation(
         cpu: bool = True,
         show_progress: bool = True,
         conversion_tasks: Optional[List[WeightConversionTask]] = None,
+        load_in_fp8: bool = False,
     ) -> Iterable[HFWeightTuple]:
         bridge = bridge_class()
 
@@ -1026,7 +1028,7 @@ def register_bridge_implementation(
         bridge.hf_config = hf_pretrained.config
 
         return bridge.stream_weights_megatron_to_hf(
-            megatron_model, hf_pretrained, cpu=cpu, show_progress=show_progress, conversion_tasks=conversion_tasks
+            megatron_model, hf_pretrained, cpu=cpu, show_progress=show_progress, conversion_tasks=conversion_tasks, load_in_fp8=load_in_fp8
         )
 
     # Set meaningful names for debugging

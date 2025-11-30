@@ -261,6 +261,7 @@ class MegatronParamMapping(ABC, Generic[WeightType]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Convert weights FROM Megatron format.
 
@@ -719,8 +720,11 @@ class DirectMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Direct copy with PP broadcast."""
+        if load_in_fp8 and HAVE_TE_FP8_TENSOR_CLASS and isinstance(megatron_weights, FP8_TENSOR_CLASS):
+            megatron_weights = megatron_weights._rowwise_data
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
@@ -830,8 +834,11 @@ class ColumnParallelMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
+        if load_in_fp8 and HAVE_TE_FP8_TENSOR_CLASS and isinstance(megatron_weights, FP8_TENSOR_CLASS):
+            megatron_weights = megatron_weights._rowwise_data
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
@@ -923,8 +930,11 @@ class RowParallelMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Gather from all TP ranks and concatenate."""
+        if load_in_fp8 and HAVE_TE_FP8_TENSOR_CLASS and isinstance(megatron_weights, FP8_TENSOR_CLASS):
+            megatron_weights = megatron_weights._rowwise_data
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
@@ -989,8 +999,11 @@ class ReplicatedMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Return weight only from rank 0 to avoid duplication."""
+        if load_in_fp8 and HAVE_TE_FP8_TENSOR_CLASS and isinstance(megatron_weights, FP8_TENSOR_CLASS):
+            megatron_weights = megatron_weights._rowwise_data
         # Handle cross-PP broadcast
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
@@ -1218,6 +1231,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Delegate to appropriate mapping based on module type."""
         # Need to determine type even if module is None (different PP rank)
@@ -1234,7 +1248,7 @@ class AutoMapping(MegatronParamMapping[torch.Tensor]):
 
             self._mapping = self._get_or_create_mapping(self._detected_type)
 
-        result = self._mapping.megatron_to_hf(megatron_weights, megatron_module)
+        result = self._mapping.megatron_to_hf(megatron_weights, megatron_module, load_in_fp8=load_in_fp8)
 
         # Apply reverse permutation if specified (after gathering)
         if self.permute_dims is not None and result:
@@ -1346,8 +1360,11 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Gather QKV shards and split into Q, K, V."""
+        if load_in_fp8 and HAVE_TE_FP8_TENSOR_CLASS and isinstance(megatron_weights, FP8_TENSOR_CLASS):
+            megatron_weights = megatron_weights._rowwise_data
         # Dequantize if needed
         if megatron_weights is not None:
             megatron_weights = self.maybe_dequantize(megatron_weights)
@@ -1366,7 +1383,7 @@ class QKVMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
             config = self.broadcast_obj_from_pp_rank(config, "qkv_config")
 
         # Delegate TP/PP gathering.
-        packed_dict = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module)
+        packed_dict = self._tp_mapping.megatron_to_hf(megatron_weights, megatron_module, load_in_fp8=load_in_fp8)
 
         if not packed_dict:
             return {}
@@ -1697,9 +1714,12 @@ class GatedMLPMapping(MegatronParamMapping[Dict[str, torch.Tensor]]):
         self,
         megatron_weights: Optional[torch.Tensor],
         megatron_module: Optional[nn.Module],
+        load_in_fp8: bool = False,
     ) -> Dict[str, torch.Tensor]:
         """Gather concatenated shards and split into gate and up."""
         # Handle cross-PP broadcast first
+        if load_in_fp8 and HAVE_TE_FP8_TENSOR_CLASS and isinstance(megatron_weights, FP8_TENSOR_CLASS):
+            megatron_weights = megatron_weights._rowwise_data
         megatron_weights = self.broadcast_from_pp_rank(megatron_weights, cache_key=str(self.hf_param))
 
         if megatron_weights is None:

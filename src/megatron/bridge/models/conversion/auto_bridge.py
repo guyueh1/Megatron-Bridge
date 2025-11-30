@@ -304,6 +304,7 @@ class AutoBridge(Generic[MegatronModelT]):
         cpu: bool = False,
         show_progress: bool = True,
         conversion_tasks: Optional[List[WeightConversionTask]] = None,
+        load_in_fp8: bool = False,
     ) -> Iterable["HFWeightTuple"]:
         """
         Export Megatron model weights to HuggingFace format.
@@ -345,6 +346,7 @@ class AutoBridge(Generic[MegatronModelT]):
             cpu=cpu,
             show_progress=show_progress,
             conversion_tasks=conversion_tasks,
+            load_in_fp8=load_in_fp8,
         )
 
     def save_hf_pretrained(self, model: list[MegatronModelT], path: str | Path, show_progress: bool = True) -> None:

@@ -395,6 +395,15 @@ class Qwen3MoEModelProvider(GPTModelProvider):
     moe_token_dispatcher_type: str = "alltoall"
     moe_permute_fusion: bool = True
 
+    # placeholder fields for yarn position embeddings that is used for context extension. These are ignored if the position embedding type is not "yarn".
+    yarn_rotary_scaling_factor: float = 4.0
+    yarn_original_max_position_embeddings: int = 32768
+    yarn_beta_fast: float = 32.0
+    yarn_beta_slow: float = 1.0
+    yarn_correction_range_round_to_int: bool = False
+    yarn_mscale: float = 1.0
+    yarn_mscale_all_dim: float = 1.0
+
 
 @dataclass
 class Qwen3MoEModelProvider30B_A3B(Qwen3MoEModelProvider):
